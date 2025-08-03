@@ -1,77 +1,75 @@
 # Hex Game (PyQt6)
 
-Gra planszowa **Hex** napisana w Pythonie z użyciem PyQt6.  
-Obsługuje tryby gry:
-- Gracz vs Gracz
-- Gracz vs Bot (Minimax AI)
+A **Hex** board game written in Python using PyQt6.
+It supports the following game modes:
+- Player vs. Player
+- Player vs. Bot (Minimax AI)
 
 ---
 
-## 📦 Instalacja i uruchomienie
+## 📦 Installation and Launch
 
-### Wersja źródłowa (Python)
+### Source Version (Python)
 
-1. Upewnij się, że masz zainstalowanego **Pythona 3.10 lub nowszego**.
-2. (Opcjonalnie) Utwórz i aktywuj środowisko wirtualne:
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate    # Windows
-   source venv/bin/activate # Linux/Mac
-   ```
-3. Zainstaluj wymagane biblioteki:
-   ```bash
-   pip install pyqt6
-   ```
-4. Uruchom grę:
-   ```bash
-   python hex_game/main.py
-   ```
-
----
-
-### Wersja `.exe` (Windows)
-
-Jeśli masz gotowy plik `HexGame.exe` (w folderze `dist/`):
-
-1. Przejdź do katalogu `dist/`.
-2. Uruchom `HexGame.exe` (podwójne kliknięcie).
-
-✅ **Nie musisz instalować Pythona ani bibliotek!**
+1.  Make sure you have **Python 3.10 or newer** installed.
+2.  (Optional) Create and activate a virtual environment:
+    ```bash
+    python -m venv venv
+    venv\Scripts\activate   # Windows
+    source venv/bin/activate # Linux/Mac
+    ```
+3.  Install the required libraries:
+    ```bash
+    pip install pyqt6
+    ```
+4.  Run the game:
+    ```bash
+    python hex_game/main.py
+    ```
 
 ---
 
-## 🎮 Jak grać
+### `.exe` Version (Windows)
 
-1. Na starcie gry możesz:
-   - Wybrać imiona graczy.
-   - Wybrać tryb gry: **Gracz vs Gracz** lub **Gracz vs Bot**.
-   - Określić, który gracz zaczyna (`X` lub `O`).
+If you have the `HexGame.exe` file (in the `dist/` folder):
 
-2. **Cel gry**:
-   - Gracz `X` — połącz lewą i prawą krawędź planszy.
-   - Gracz `O` — połącz górną i dolną krawędź planszy.
+1.  Navigate to the `dist/` directory.
+2.  Run `HexGame.exe` (by double-clicking).
 
-3. **Sterowanie**:
-   - Klikaj na heksagony, aby stawiać swoje znaczniki (`X` lub `O`).
-
-4. **Po wygranej**:
-   - Ścieżka zwycięzcy zostaje automatycznie podświetlona.
-   - Wyświetli się komunikat z gratulacjami.
+✅ **You don't need to install Python or any libraries!**
 
 ---
 
-## 💾 Funkcje dodatkowe
+## 🎮 How to Play
 
-- 📂 Zapisywanie i wczytywanie stanu gry (`Plik -> Zapisz/Wczytaj`).
-- 🧐 Tryb **Gracz vs Bot** z prostym AI (algorytm Minimax).
-- 🔍 Zoomowanie planszy za pomocą kółka myszy.
-- ✨ Animacje pól i podświetlanie zwycięskiej ścieżki.
+1.  When the game starts, you can:
+    -   Choose player names.
+    -   Select the game mode: **Player vs. Player** or **Player vs. Bot**.
+    -   Specify which player starts (`X` or `O`).
+
+2.  **Objective**:
+    -   Player `X` — connect the left and right edges of the board.
+    -   Player `O` — connect the top and bottom edges of the board.
+
+3.  **Controls**:
+    -   Click on the hexagons to place your markers (`X` or `O`).
+
+4.  **After a win**:
+    -   The winner's path is automatically highlighted.
+    -   A congratulatory message is displayed.
 
 ---
 
-## 📜 Wymagania
+## 💾 Additional Features
 
-- Python 3.10+
-- PyQt6
+-   📂 Save and load game state (`File -> Save/Load`).
+-   🧐 **Player vs. Bot** mode with a simple AI (Minimax algorithm).
+-   🔍 Zoom the board using the mouse wheel.
+-   ✨ Tile animations and highlighting of the winning path.
 
 ---
+
+## 📜 Requirements
+
+-   Python 3.10+
+-   PyQt6
