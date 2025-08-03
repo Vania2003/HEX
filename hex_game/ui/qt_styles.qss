@@ -1,0 +1,13 @@
+QWidget {
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+}
+QStatusBar {
+    background-color: #2a2a2a;
+}
+QMenuBar {
+    background-color: #2a2a2a;
+}
+QMenuBar::item:selected {
+    background: #3a3a3a;
+}
