@@ -1,143 +1,199 @@
+"""Hex board state.
+
+Stones live in a flat bytearray and connectivity is maintained incrementally by
+a rollback-capable disjoint-set structure, so asking who won is O(1) instead of
+a depth-first search over the whole board after every move.
+
+Two APIs are offered on purpose:
+
+* ``apply_move`` / ``undo_move`` / ``get_state`` take ``(col, row)`` pairs and
+  ``'X'``/``'O'`` characters.  This is what the UI and the saved games use.
+* ``play`` / ``undo`` / ``cells`` work on flat indices and integer codes.  This
+  is the hot path for the search algorithms.
+"""
+
+from collections import deque
+
+from hex_game.engine.geometry import CODES, EMPTY, SYMBOLS, X, BoardGeometry
+from hex_game.engine.union_find import RollbackUnionFind
+
+
 class Board:
     def __init__(self, size=11):
         self.size = size
-        self.grid = [['.' for _ in range(size)] for _ in range(size)]
-        self.winner = None
-        self.winning_path = []
+        self.geometry = BoardGeometry.get(size)
+        self.cells = bytearray(self.geometry.cell_count)
+        self.empty_count = self.geometry.cell_count
+        self.winner_code = EMPTY
+        self._dsu = RollbackUnionFind(self.geometry.node_count)
+        self._undo_stack = []
+        self._winning_path = None
+
+        # Empty cells touching at least one stone, maintained in O(6) per move
+        # so a search does not have to rescan the board at every node.
+        self.frontier = set()
+        self._occupied_neighbours = [0] * self.geometry.cell_count
+
+    # ------------------------------------------------------------------
+    # flat-index API (search hot path)
+    # ------------------------------------------------------------------
+
+    def play(self, index, code):
+        """Place a stone on an empty cell and update connectivity."""
+        geometry = self.geometry
+        dsu = self._dsu
+        mark = dsu.mark()
+
+        self.cells[index] = code
+        self.empty_count -= 1
+
+        self.frontier.discard(index)
+        counts = self._occupied_neighbours
+        for neighbour in geometry.neighbours[index]:
+            counts[neighbour] += 1
+            if self.cells[neighbour] == code:
+                dsu.union(index, neighbour)
+            elif self.cells[neighbour] == EMPTY:
+                self.frontier.add(neighbour)
+        for border in geometry.border_nodes[index][0 if code == X else 1]:
+            dsu.union(index, border)
+
+        self._undo_stack.append((index, mark, self.winner_code))
+        if self.winner_code == EMPTY:
+            start, end = geometry.goal_nodes(code)
+            if dsu.connected(start, end):
+                self.winner_code = code
+                self._winning_path = None
+
+    def undo(self):
+        index, mark, previous_winner = self._undo_stack.pop()
+        self.cells[index] = EMPTY
+        self.empty_count += 1
+        self._dsu.rollback(mark)
+        self.winner_code = previous_winner
+        self._winning_path = None
+
+        counts = self._occupied_neighbours
+        for neighbour in self.geometry.neighbours[index]:
+            counts[neighbour] -= 1
+            if counts[neighbour] == 0 and self.cells[neighbour] == EMPTY:
+                self.frontier.discard(neighbour)
+        if counts[index]:
+            self.frontier.add(index)
+        return index
+
+    def legal_indices(self):
+        cells = self.cells
+        return [index for index in range(len(cells)) if cells[index] == EMPTY]
+
+    def is_empty(self, index):
+        return self.cells[index] == EMPTY
+
+    def copy(self):
+        clone = Board.__new__(Board)
+        clone.size = self.size
+        clone.geometry = self.geometry
+        clone.cells = bytearray(self.cells)
+        clone.empty_count = self.empty_count
+        clone.winner_code = self.winner_code
+        clone._dsu = self._dsu.copy()
+        clone._undo_stack = self._undo_stack[:]
+        clone._winning_path = None
+        clone.frontier = set(self.frontier)
+        clone._occupied_neighbours = self._occupied_neighbours[:]
+        return clone
+
+    # ------------------------------------------------------------------
+    # (col, row) API used by the UI and persistence
+    # ------------------------------------------------------------------
 
     def is_valid_move(self, x, y):
-        return 0 <= x < self.size and 0 <= y < self.size and self.grid[y][x] == '.'
+        return (
+            0 <= x < self.size
+            and 0 <= y < self.size
+            and self.cells[y * self.size + x] == EMPTY
+        )
 
     def place_piece(self, x, y, player):
-        if self.is_valid_move(x, y):
-            self.grid[y][x] = player
-            return True
-        return False
-
-    def get_state(self):
-        return self.grid
-
-    def has_connection(self, player):
-        visited = set()
-        size = self.size
-
-        def neighbors(x, y):
-            if x % 2 == 0:
-                return [
-                    (x - 1, y), (x + 1, y),
-                    (x, y - 1), (x, y + 1),
-                    (x - 1, y - 1), (x + 1, y - 1)
-                ]
-            else:
-                return [
-                    (x - 1, y), (x + 1, y),
-                    (x, y - 1), (x, y + 1),
-                    (x - 1, y + 1), (x + 1, y + 1)
-                ]
-
-        def dfs(x, y):
-            if (x, y) in visited:
-                return False
-            visited.add((x, y))
-
-            if player == 'X' and x == size - 1:
-                return True
-            if player == 'O' and y == size - 1:
-                return True
-
-            for nx, ny in neighbors(x, y):
-                if 0 <= nx < size and 0 <= ny < size:
-                    if self.grid[ny][nx] == player and (nx, ny) not in visited:
-                        if dfs(nx, ny):
-                            return True
+        if not self.is_valid_move(x, y):
             return False
-
-        if player == 'X':
-            for y in range(size):
-                if self.grid[y][0] == 'X':
-                    if dfs(0, y):
-                        return True
-        else:
-            for x in range(size):
-                if self.grid[0][x] == 'O':
-                    if dfs(x, 0):
-                        return True
-
-        return False
-
-    def find_winner(self):
-        """Sprawdza realnie kto wygrał i zapamiętuje ścieżkę."""
-        visited = set()
-        path = []
-        size = self.size
-
-        def neighbors(x, y):
-            if x % 2 == 0:
-                return [
-                    (x - 1, y), (x + 1, y),
-                    (x, y - 1), (x, y + 1),
-                    (x - 1, y - 1), (x + 1, y - 1)
-                ]
-            else:
-                return [
-                    (x - 1, y), (x + 1, y),
-                    (x, y - 1), (x, y + 1),
-                    (x - 1, y + 1), (x + 1, y + 1)
-                ]
-
-        def dfs(x, y, trace):
-            if (x, y) in visited:
-                return False
-            visited.add((x, y))
-            trace.append((x, y))
-
-            if player == 'X' and x == size - 1:
-                path.extend(trace)
-                return True
-            if player == 'O' and y == size - 1:
-                path.extend(trace)
-                return True
-
-            for nx, ny in neighbors(x, y):
-                if 0 <= nx < size and 0 <= ny < size:
-                    if self.grid[ny][nx] == player and (nx, ny) not in visited:
-                        if dfs(nx, ny, trace.copy()):
-                            return True
-            trace.pop()
-            return False
-
-        for player in ['X', 'O']:
-            visited.clear()
-            if player == 'X':
-                for y in range(size):
-                    if self.grid[y][0] == 'X':
-                        if dfs(0, y, []):
-                            self.winner = 'X'
-                            self.winning_path = path
-                            return 'X'
-            else:
-                for x in range(size):
-                    if self.grid[0][x] == 'O':
-                        if dfs(x, 0, []):
-                            self.winner = 'O'
-                            self.winning_path = path
-                            return 'O'
-        return None
-
-    def get_possible_moves(self):
-        return [(x, y) for y in range(self.size) for x in range(self.size) if self.grid[y][x] == '.']
+        self.play(y * self.size + x, CODES[player])
+        return True
 
     def apply_move(self, x, y, player):
-        self.grid[y][x] = player
+        self.play(y * self.size + x, CODES[player])
 
-    def undo_move(self, x, y):
-        self.grid[y][x] = '.'
+    def undo_move(self, x=None, y=None):
+        self.undo()
+
+    def get_cell(self, x, y):
+        return SYMBOLS[self.cells[y * self.size + x]]
+
+    def get_state(self):
+        size = self.size
+        cells = self.cells
+        return [
+            [SYMBOLS[cells[row * size + col]] for col in range(size)]
+            for row in range(size)
+        ]
+
+    def get_possible_moves(self):
+        size = self.size
+        return [(index % size, index // size) for index in self.legal_indices()]
+
+    # ------------------------------------------------------------------
+    # win queries
+    # ------------------------------------------------------------------
+
+    @property
+    def winner(self):
+        return SYMBOLS[self.winner_code] if self.winner_code else None
+
+    def has_connection(self, player):
+        code = CODES[player] if isinstance(player, str) else player
+        start, end = self.geometry.goal_nodes(code)
+        return self._dsu.connected(start, end)
 
     def get_winner_simulation(self):
-        for player in ['X', 'O']:
-            if self.has_connection(player):
-                return player
-        return None
+        return self.winner
+
+    def find_winner(self):
+        return self.winner
 
     def get_winning_path(self):
-        return self.winning_path if hasattr(self, "winning_path") else []
+        if self.winner_code == EMPTY:
+            return []
+        if self._winning_path is None:
+            self._winning_path = self._compute_winning_path(self.winner_code)
+        return self._winning_path
+
+    def _compute_winning_path(self, code):
+        """Shortest chain of own stones joining the player's two borders."""
+        geometry = self.geometry
+        cells = self.cells
+        if code == X:
+            sources, is_target = geometry.left_cells, set(geometry.right_cells)
+        else:
+            sources, is_target = geometry.top_cells, set(geometry.bottom_cells)
+
+        previous = {}
+        queue = deque()
+        for index in sources:
+            if cells[index] == code:
+                previous[index] = None
+                queue.append(index)
+
+        while queue:
+            index = queue.popleft()
+            if index in is_target:
+                path = []
+                while index is not None:
+                    path.append(geometry.coords(index))
+                    index = previous[index]
+                path.reverse()
+                return path
+            for neighbour in geometry.neighbours[index]:
+                if cells[neighbour] == code and neighbour not in previous:
+                    previous[neighbour] = index
+                    queue.append(neighbour)
+        return []

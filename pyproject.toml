@@ -1,0 +1,13 @@
+[project]
+name = "hex-game"
+version = "0.2.0"
+description = "Hex board game with minimax and MCTS agents"
+requires-python = ">=3.10"
+dependencies = ["PyQt6"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

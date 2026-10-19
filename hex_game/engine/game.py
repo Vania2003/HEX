@@ -1,32 +1,110 @@
+"""Rules layer: turn order, the swap rule, undo and persistence.
+
+Seats and people are kept apart.  ``'X'`` and ``'O'`` are *seats*: X always
+joins left to right, O always joins top to bottom, and the move history records
+seats.  ``player_x`` / ``player_o`` say which person currently sits where.
+
+That split is what makes the swap rule (pie rule) cheap.  Hex gives the first
+player a winning strategy, so the second player is allowed, instead of
+answering the opening move, to take it over.  Doing so exchanges the two
+people's seats and leaves the board untouched, so no stone has to be moved and
+the recorded history stays valid.
+"""
+
 from hex_game.engine.board import Board
+from hex_game.engine.geometry import CODES
+
+MOVE = "move"
+SWAP = "swap"
+
 
 class Game:
-    def __init__(self, board_size=11, with_bot=False, player_x="X", player_o="O", first="X"):
+    def __init__(self, board_size=11, with_bot=False, player_x="X", player_o="O",
+                 first="X", swap_rule=True):
         self.board = Board(board_size)
         self.with_bot = with_bot
         self.player_x = player_x
         self.player_o = player_o
+        self.first = first
         self.current_player = first
         self.winner = None
-        self.move_history = []  # list of (player, x, y)
+        self.swap_rule = swap_rule
+        self.swapped = False
+        self.actions = []
+        self.move_history = []  # list of (seat, x, y)
+
+    # ------------------------------------------------------------------
+    # playing
+    # ------------------------------------------------------------------
 
     def make_move(self, x, y):
         if self.winner is not None:
             return False
-        if not self.board.is_valid_move(x, y):
+        if not self.board.place_piece(x, y, self.current_player):
             return False
-        if self.board.place_piece(x, y, self.current_player):
-            self.move_history.append((self.current_player, x, y))
-            if self.board.find_winner() == self.current_player:
-                self.winner = self.current_player
-                #self.board.mark_winning_path(self.current_player)
-            else:
-                self.toggle_player()
-            return True
-        return False
+
+        seat = self.current_player
+        self.move_history.append((seat, x, y))
+        self.actions.append((MOVE, seat, x, y))
+
+        if self.board.winner == seat:
+            self.winner = seat
+        else:
+            self.toggle_player()
+        return True
+
+    def can_swap(self):
+        """The pie rule is open to the second player, before their first stone."""
+        return (
+            self.swap_rule
+            and not self.swapped
+            and self.winner is None
+            and len(self.move_history) == 1
+        )
+
+    def apply_swap(self):
+        """Second player claims the opening stone by taking the first seat."""
+        if not self.can_swap():
+            return False
+        self.player_x, self.player_o = self.player_o, self.player_x
+        self.swapped = True
+        self.actions.append((SWAP,))
+        # The seat to move does not change: the opening seat is now occupied by
+        # the swapping player, and the other seat still owes a stone.
+        return True
+
+    def undo_last(self):
+        """Take back one action. Returns the kind that was undone, or None."""
+        if not self.actions:
+            return None
+        action = self.actions.pop()
+        if action[0] == SWAP:
+            self.player_x, self.player_o = self.player_o, self.player_x
+            self.swapped = False
+            return SWAP
+
+        _, seat, _, _ = action
+        self.board.undo()
+        self.move_history.pop()
+        self.current_player = seat
+        self.winner = self.board.winner
+        return MOVE
+
+    def undo_turn(self, seat):
+        """Undo until ``seat`` is to move again, so a human regains their turn."""
+        undone = 0
+        while self.actions and (self.current_player != seat or undone == 0):
+            if self.undo_last() is None:
+                break
+            undone += 1
+        return undone
 
     def toggle_player(self):
         self.current_player = 'O' if self.current_player == 'X' else 'X'
+
+    # ------------------------------------------------------------------
+    # queries
+    # ------------------------------------------------------------------
 
     def get_current_player(self):
         return self.current_player
@@ -34,8 +112,14 @@ class Game:
     def get_current_player_name(self):
         return self.player_x if self.current_player == 'X' else self.player_o
 
+    def get_player_name(self, seat):
+        return self.player_x if seat == 'X' else self.player_o
+
     def get_winner(self):
         return self.winner
+
+    def get_winner_name(self):
+        return self.get_player_name(self.winner) if self.winner else None
 
     def get_winning_path(self):
         return self.board.get_winning_path()
@@ -43,31 +127,34 @@ class Game:
     def get_move_history(self):
         return self.move_history
 
-    def serialize(self):
-        return {
-            "board_size": self.board.size,
-            "with_bot": self.with_bot,
-            "player_x": self.player_x,
-            "player_o": self.player_o,
-            "first": self.current_player,
-            "winner": self.winner,
-            "history": self.move_history,
-        }
-
     def get_score(self):
         """Zlicza liczbę zajętych pól przez każdego gracza."""
-        score = {"X": 0, "O": 0}
-        for row in self.board.get_state():
-            for cell in row:
-                if cell == "X":
-                    score["X"] += 1
-                elif cell == "O":
-                    score["O"] += 1
-        return score
+        cells = self.board.cells
+        return {"X": cells.count(CODES["X"]), "O": cells.count(CODES["O"])}
 
     def get_board_state(self):
         """Zwraca aktualny stan planszy."""
         return self.board.get_state()
+
+    # ------------------------------------------------------------------
+    # persistence
+    # ------------------------------------------------------------------
+
+    def serialize(self):
+        return {
+            "version": 2,
+            "board_size": self.board.size,
+            "with_bot": self.with_bot,
+            "player_x": self.player_x,
+            "player_o": self.player_o,
+            "first": self.first,
+            "current": self.current_player,
+            "winner": self.winner,
+            "swap_rule": self.swap_rule,
+            "swapped": self.swapped,
+            "history": self.move_history,
+            "actions": [list(action) for action in self.actions],
+        }
 
     @classmethod
     def load_from_dict(cls, data):
@@ -76,18 +163,37 @@ class Game:
             with_bot=data.get("with_bot", False),
             player_x=data.get("player_x", "X"),
             player_o=data.get("player_o", "O"),
-            first=data.get("first", "X")
+            first=data.get("first", "X"),
+            swap_rule=data.get("swap_rule", True),
         )
-        for player, x, y in data.get("history", []):
-            game.current_player = player
+
+        actions = data.get("actions")
+        if actions is None:
+            # Version 1 saves only stored the move list.
+            actions = [[MOVE, seat, x, y] for seat, x, y in data.get("history", [])]
+
+        for action in actions:
+            if action[0] == SWAP:
+                game.actions.append((SWAP,))
+                game.swapped = True
+                continue
+            _, seat, x, y = action
+            game.current_player = seat
             game.make_move(x, y)
+
+        # Names in the file are already post-swap, so replaying the swap action
+        # must not flip them again; only the turn needs restoring.
+        game.current_player = data.get("current", game.current_player)
+        game.winner = game.board.winner
         return game
 
-    def reset(self, with_bot=False, first="X", player_x="X", player_o="O"):
+    def reset(self, with_bot=False, first="X", player_x="X", player_o="O",
+              board_size=None, swap_rule=None):
         self.__init__(
-            board_size=self.board.size,
+            board_size=self.board.size if board_size is None else board_size,
             with_bot=with_bot,
             player_x=player_x,
             player_o=player_o,
-            first=first
+            first=first,
+            swap_rule=self.swap_rule if swap_rule is None else swap_rule,
         )

@@ -3,9 +3,9 @@
 
 a = Analysis(
     ['hex_game\\main.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
-    datas=[],
+    datas=[('hex_game/ui/qt_styles.qss', 'hex_game/ui')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='main',
+    name='HexGame',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
