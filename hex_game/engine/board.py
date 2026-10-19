@@ -17,6 +17,11 @@ class Board:
         self.frontier = set()
         self._occupied_neighbours = [0] * self.geometry.cell_count
 
+    @property
+    def dsu(self):
+        """Exposed so a search can union and roll back on the live structure."""
+        return self._dsu
+
     def play(self, index, code):
         geometry = self.geometry
         dsu = self._dsu

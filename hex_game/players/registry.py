@@ -1,7 +1,9 @@
 from hex_game.players.bot_minimax import MinimaxBot
+from hex_game.players.mcts import MCTSBot
 
 AGENT_TYPES = (
     ("minimax", "Minimax (alfa-beta)"),
+    ("mcts", "MCTS (UCT)"),
 )
 
 DIFFICULTIES = (
@@ -12,6 +14,7 @@ DIFFICULTIES = (
 
 _FACTORIES = {
     "minimax": MinimaxBot,
+    "mcts": MCTSBot,
 }
 
 

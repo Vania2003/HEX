@@ -1,5 +1,10 @@
 AXIAL_DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1))
 
+# A bridge joins two cells that share exactly two empty neighbours (the
+# carrier). It is a virtual connection: whichever carrier the opponent takes,
+# the other one still joins the pair.
+AXIAL_BRIDGE_DIRECTIONS = ((1, 1), (2, -1), (1, -2), (-1, -1), (-2, 1), (-1, 2))
+
 EVEN_COL_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1))
 ODD_COL_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, 1), (1, 1))
 
@@ -47,6 +52,19 @@ class BoardGeometry:
             for index in range(self.cell_count)
         )
 
+        self.bridges = self._compute_bridges()
+        self.edge_bridges = self._compute_edge_bridges()
+        self.bridge_saves = self._compute_bridge_saves()
+        self.edge_bridge_saves = self._compute_edge_bridge_saves()
+        self.playout_saves = tuple(
+            cell_entries + edge_entries
+            for cell_entries, edge_entries
+            in zip(self.bridge_saves, self.edge_bridge_saves)
+        )
+        # Appended to a playout board so that the four border nodes can be read
+        # like ordinary stones, which lets edge bridges share the cell path.
+        self.virtual_tail = bytes((X, X, O, O))
+
     @classmethod
     def get(cls, size):
         geometry = cls._cache.get(size)
@@ -88,6 +106,64 @@ class BoardGeometry:
         if row == self.size - 1:
             o_nodes.append(self.bottom_node)
         return tuple(x_nodes), tuple(o_nodes)
+
+    def _compute_bridges(self):
+        neighbour_sets = [set(group) for group in self.neighbours]
+        found = []
+        seen = set()
+        for first in range(self.cell_count):
+            q, r = self.axial(first)
+            for dq, dr in AXIAL_BRIDGE_DIRECTIONS:
+                col, row = from_axial(q + dq, r + dr)
+                if not (0 <= col < self.size and 0 <= row < self.size):
+                    continue
+                second = self.index(col, row)
+                key = (min(first, second), max(first, second))
+                if key in seen:
+                    continue
+                carriers = neighbour_sets[first] & neighbour_sets[second]
+                if len(carriers) != 2:
+                    continue
+                seen.add(key)
+                left, right = sorted(carriers)
+                found.append((first, second, left, right))
+        return tuple(found)
+
+    def _compute_edge_bridges(self):
+        """A cell one step from its owner's border bridges to that border."""
+        found = []
+        for index in range(self.cell_count):
+            col, row = self.coords(index)
+            for node, on_approach, on_border in (
+                (self.left_node, col == 1, lambda c, r: c == 0),
+                (self.right_node, col == self.size - 2, lambda c, r: c == self.size - 1),
+                (self.top_node, row == 1, lambda c, r: r == 0),
+                (self.bottom_node, row == self.size - 2, lambda c, r: r == self.size - 1),
+            ):
+                if not on_approach:
+                    continue
+                carriers = sorted(
+                    neighbour
+                    for neighbour in self.neighbours[index]
+                    if on_border(*self.coords(neighbour))
+                )
+                if len(carriers) == 2:
+                    found.append((index, node, carriers[0], carriers[1]))
+        return tuple(found)
+
+    def _compute_bridge_saves(self):
+        saves = [[] for _ in range(self.cell_count)]
+        for first, second, left, right in self.bridges:
+            saves[left].append((first, second, right))
+            saves[right].append((first, second, left))
+        return tuple(tuple(group) for group in saves)
+
+    def _compute_edge_bridge_saves(self):
+        saves = [[] for _ in range(self.cell_count)]
+        for index, node, left, right in self.edge_bridges:
+            saves[left].append((index, node, right))
+            saves[right].append((index, node, left))
+        return tuple(tuple(group) for group in saves)
 
     def goal_nodes(self, player):
         if player == X:
