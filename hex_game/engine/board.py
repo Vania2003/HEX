@@ -1,22 +1,7 @@
-"""Hex board state.
-
-Stones live in a flat bytearray and connectivity is maintained incrementally by
-a rollback-capable disjoint-set structure, so asking who won is O(1) instead of
-a depth-first search over the whole board after every move.
-
-Two APIs are offered on purpose:
-
-* ``apply_move`` / ``undo_move`` / ``get_state`` take ``(col, row)`` pairs and
-  ``'X'``/``'O'`` characters.  This is what the UI and the saved games use.
-* ``play`` / ``undo`` / ``cells`` work on flat indices and integer codes.  This
-  is the hot path for the search algorithms.
-"""
-
 from collections import deque
 
 from hex_game.engine.geometry import CODES, EMPTY, SYMBOLS, X, BoardGeometry
 from hex_game.engine.union_find import RollbackUnionFind
-
 
 class Board:
     def __init__(self, size=11):
@@ -29,17 +14,10 @@ class Board:
         self._undo_stack = []
         self._winning_path = None
 
-        # Empty cells touching at least one stone, maintained in O(6) per move
-        # so a search does not have to rescan the board at every node.
         self.frontier = set()
         self._occupied_neighbours = [0] * self.geometry.cell_count
 
-    # ------------------------------------------------------------------
-    # flat-index API (search hot path)
-    # ------------------------------------------------------------------
-
     def play(self, index, code):
-        """Place a stone on an empty cell and update connectivity."""
         geometry = self.geometry
         dsu = self._dsu
         mark = dsu.mark()
@@ -103,10 +81,6 @@ class Board:
         clone._occupied_neighbours = self._occupied_neighbours[:]
         return clone
 
-    # ------------------------------------------------------------------
-    # (col, row) API used by the UI and persistence
-    # ------------------------------------------------------------------
-
     def is_valid_move(self, x, y):
         return (
             0 <= x < self.size
@@ -140,10 +114,6 @@ class Board:
     def get_possible_moves(self):
         size = self.size
         return [(index % size, index // size) for index in self.legal_indices()]
-
-    # ------------------------------------------------------------------
-    # win queries
-    # ------------------------------------------------------------------
 
     @property
     def winner(self):

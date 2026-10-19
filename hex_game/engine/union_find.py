@@ -1,12 +1,3 @@
-"""Disjoint-set structure that supports undoing unions.
-
-Union by size without path compression keeps every union reversible, which is
-what a game-tree search needs: ``mark()`` before a move, ``rollback(mark)`` when
-the move is taken back.  Find stays O(log n), which is far cheaper than the
-full board DFS the engine used to run after every single move.
-"""
-
-
 class RollbackUnionFind:
     __slots__ = ("parent", "size", "_log")
 

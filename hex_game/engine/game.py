@@ -1,22 +1,8 @@
-"""Rules layer: turn order, the swap rule, undo and persistence.
-
-Seats and people are kept apart.  ``'X'`` and ``'O'`` are *seats*: X always
-joins left to right, O always joins top to bottom, and the move history records
-seats.  ``player_x`` / ``player_o`` say which person currently sits where.
-
-That split is what makes the swap rule (pie rule) cheap.  Hex gives the first
-player a winning strategy, so the second player is allowed, instead of
-answering the opening move, to take it over.  Doing so exchanges the two
-people's seats and leaves the board untouched, so no stone has to be moved and
-the recorded history stays valid.
-"""
-
 from hex_game.engine.board import Board
 from hex_game.engine.geometry import CODES
 
 MOVE = "move"
 SWAP = "swap"
-
 
 class Game:
     def __init__(self, board_size=11, with_bot=False, player_x="X", player_o="O",
@@ -32,10 +18,6 @@ class Game:
         self.swapped = False
         self.actions = []
         self.move_history = []  # list of (seat, x, y)
-
-    # ------------------------------------------------------------------
-    # playing
-    # ------------------------------------------------------------------
 
     def make_move(self, x, y):
         if self.winner is not None:
@@ -54,7 +36,6 @@ class Game:
         return True
 
     def can_swap(self):
-        """The pie rule is open to the second player, before their first stone."""
         return (
             self.swap_rule
             and not self.swapped
@@ -63,18 +44,14 @@ class Game:
         )
 
     def apply_swap(self):
-        """Second player claims the opening stone by taking the first seat."""
         if not self.can_swap():
             return False
         self.player_x, self.player_o = self.player_o, self.player_x
         self.swapped = True
         self.actions.append((SWAP,))
-        # The seat to move does not change: the opening seat is now occupied by
-        # the swapping player, and the other seat still owes a stone.
         return True
 
     def undo_last(self):
-        """Take back one action. Returns the kind that was undone, or None."""
         if not self.actions:
             return None
         action = self.actions.pop()
@@ -91,7 +68,6 @@ class Game:
         return MOVE
 
     def undo_turn(self, seat):
-        """Undo until ``seat`` is to move again, so a human regains their turn."""
         undone = 0
         while self.actions and (self.current_player != seat or undone == 0):
             if self.undo_last() is None:
@@ -101,10 +77,6 @@ class Game:
 
     def toggle_player(self):
         self.current_player = 'O' if self.current_player == 'X' else 'X'
-
-    # ------------------------------------------------------------------
-    # queries
-    # ------------------------------------------------------------------
 
     def get_current_player(self):
         return self.current_player
@@ -128,17 +100,11 @@ class Game:
         return self.move_history
 
     def get_score(self):
-        """Zlicza liczbę zajętych pól przez każdego gracza."""
         cells = self.board.cells
         return {"X": cells.count(CODES["X"]), "O": cells.count(CODES["O"])}
 
     def get_board_state(self):
-        """Zwraca aktualny stan planszy."""
         return self.board.get_state()
-
-    # ------------------------------------------------------------------
-    # persistence
-    # ------------------------------------------------------------------
 
     def serialize(self):
         return {
@@ -181,8 +147,6 @@ class Game:
             game.current_player = seat
             game.make_move(x, y)
 
-        # Names in the file are already post-swap, so replaying the swap action
-        # must not flip them again; only the turn needs restoring.
         game.current_player = data.get("current", game.current_player)
         game.winner = game.board.winner
         return game

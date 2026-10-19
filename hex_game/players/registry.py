@@ -1,10 +1,3 @@
-"""Catalogue of playable agents and difficulty presets.
-
-The UI picks agents by key rather than importing a concrete class, so adding
-the MCTS agent later is a one-line change here instead of a change in the
-window code.
-"""
-
 from hex_game.players.bot_minimax import MinimaxBot
 
 AGENT_TYPES = (

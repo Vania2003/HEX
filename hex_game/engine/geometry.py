@@ -1,25 +1,3 @@
-"""Single source of truth for the Hex board geometry.
-
-Cells are stored in a flat array of ``size * size`` entries, addressed by
-``index = row * size + col``.  Storage coordinates ``(col, row)`` are an even-q
-offset projection of axial coordinates ``(q, r)``::
-
-    q = col
-    r = row - col // 2
-
-Under that bijection the six fixed axial neighbours ``(q+1, r), (q-1, r),
-(q, r+1), (q, r-1), (q+1, r-1), (q-1, r+1)`` turn into the parity-dependent
-offsets listed below.  Expressing them once here keeps the engine, the bots and
-the renderer on the same graph; the previous code had the axial deltas
-hard-coded in the bot and the offset deltas hard-coded in the board, which are
-two different graphs that disagree on 27% of the edges.
-
-X owns the LEFT and RIGHT borders, O owns the TOP and BOTTOM borders.  Each
-border is exposed as a virtual node placed just past the real cells, so that a
-disjoint-set structure can answer "has this player connected its two sides?"
-without searching the board.
-"""
-
 AXIAL_DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1))
 
 EVEN_COL_DELTAS = ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1))
@@ -36,21 +14,15 @@ CODES = {'.': EMPTY, 'X': X, 'O': O}
 def to_axial(col, row):
     return col, row - col // 2
 
-
 def from_axial(q, r):
     return q, r + q // 2
 
-
 class BoardGeometry:
-    """Pre-computed adjacency and border tables for one board size."""
-
     _cache = {}
 
     def __init__(self, size):
         self.size = size
         self.cell_count = size * size
-
-        # Virtual border nodes live right after the real cells.
         self.left_node = self.cell_count
         self.right_node = self.cell_count + 1
         self.top_node = self.cell_count + 2
@@ -104,7 +76,6 @@ class BoardGeometry:
         return tuple(result)
 
     def _compute_border_nodes(self, index):
-        """Virtual nodes a stone on this cell should be merged with, per player."""
         col, row = self.coords(index)
         x_nodes = []
         o_nodes = []

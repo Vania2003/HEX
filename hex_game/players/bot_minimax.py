@@ -1,21 +1,3 @@
-"""Alpha-beta baseline agent.
-
-This is the reference opponent the MCTS agent is measured against, so it has to
-be a fair baseline rather than a straw man.  Three things were wrong with the
-original version:
-
-* it walked the board with its own hard-coded axial deltas while the engine
-  used offset deltas, so 27% of the edges it reasoned about did not exist;
-* the connection-distance search re-queued cells that were already settled,
-  which made it the single most expensive function in the program;
-* a heuristic score of 10000 outranked an actual win worth 1000, so the search
-  could prefer "almost connected" over "connected".
-
-Evaluation is the difference of connection distances: the number of empty cells
-a player still has to fill to join its two borders, with own stones free and
-opponent stones impassable.
-"""
-
 import math
 import time
 from collections import deque
@@ -29,10 +11,8 @@ UNREACHABLE = 1 << 30
 class SearchTimeout(Exception):
     pass
 
-
 def _other(code):
     return O if code == X else X
-
 
 class MinimaxBot:
     def __init__(self, symbol, depth=4, time_limit=1.0):
@@ -45,8 +25,6 @@ class MinimaxBot:
         self.time_limit = time_limit
         self.nodes = 0
         self.reached_depth = 0
-
-    # ------------------------------------------------------------------
 
     def make_move(self, board):
         geometry = board.geometry
@@ -82,14 +60,6 @@ class MinimaxBot:
         self.opponent_code = _other(self.code)
 
     def should_swap(self, board):
-        """Decide whether to claim the opening stone instead of answering it.
-
-        Connection distance alone cannot tell a corner opening from a central
-        one -- any single stone shortens its owner's crossing by at most one --
-        so centrality decides as well.  A stone is worth stealing when it both
-        shortens its owner's crossing and sits in the central region, which is
-        the usual domain knowledge for the pie rule.
-        """
         stones = [index for index, cell in enumerate(board.cells) if cell]
         if len(stones) != 1:
             return False
@@ -98,7 +68,6 @@ class MinimaxBot:
         return positional > 0 and central
 
     def _decisive_move(self, board, candidates, code):
-        """A move that ends the game at once, for whoever is given."""
         for index in candidates:
             board.play(index, code)
             decided = board.winner_code == code
@@ -131,7 +100,6 @@ class MinimaxBot:
         if self.nodes % 128 == 0 and time.perf_counter() > deadline:
             raise SearchTimeout
 
-        # Only the player who just moved can have won, so the side to move lost.
         if board.winner_code != EMPTY:
             return -(WIN_SCORE + depth)
         if depth == 0:
@@ -152,17 +120,13 @@ class MinimaxBot:
                 break
         return best if best != -math.inf else self._evaluate(board, code)
 
-    # ------------------------------------------------------------------
-
     def _candidates(self, board):
-        """Empty cells touching a stone; the centre on an empty board."""
         if not board.frontier:
             middle = board.size // 2
             return [board.geometry.index(middle, middle)]
         return list(board.frontier)
 
     def _ordered(self, board, candidates, code):
-        """Cheap static ordering so alpha-beta actually prunes."""
         geometry = board.geometry
         cells = board.cells
         opponent = _other(code)
@@ -183,7 +147,6 @@ class MinimaxBot:
         return candidates
 
     def _evaluate(self, board, code):
-        """Positive when the side to move is closer to joining its borders."""
         mine = self._connection_distance(board, code)
         theirs = self._connection_distance(board, _other(code))
         if mine >= UNREACHABLE and theirs >= UNREACHABLE:
@@ -195,7 +158,6 @@ class MinimaxBot:
         return (theirs - mine) * 100
 
     def _connection_distance(self, board, code):
-        """Empty cells still needed to join this player's two borders (0-1 BFS)."""
         geometry = board.geometry
         cells = board.cells
         size = board.size

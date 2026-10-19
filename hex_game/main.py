@@ -1,6 +1,3 @@
-# File: hex_game/main.py
-"""Entry point. Run from the project root with ``python -m hex_game.main``."""
-
 import sys
 from importlib import resources
 
